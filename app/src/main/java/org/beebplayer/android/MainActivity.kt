@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); handleLaunch(intent) }
     private fun handleLaunch(incoming: Intent): Boolean {
         if (incoming.action == Intent.ACTION_APPLICATION_PREFERENCES) { currentTab = "Settings"; settings(); return true }
+        ProgrammeLink.parse(incoming)?.let { openLink(it); return true }
         val channel = LiveHomeChannels.channelId(incoming) ?: return false
         backStack.clear(); currentTab = "Live"; live()
         if (channel != "all") startActivity(Intent(this, PlaybackActivity::class.java).putExtra("channel", channel).putExtra("title", "BBC Live"))
@@ -375,6 +376,24 @@ class MainActivity : ComponentActivity() {
         load(key.replaceFirstChar(Char::uppercase), { api.page(key, category, number) }) { result ->
             val bar = LinearLayout(this); if (number > 1) bar.addView(button("‹ Previous") { page(key, category, number - 1) }); bar.addView(label("  Page $number / ${result.totalPages}  ", 18f)); if (number < result.totalPages) bar.addView(button("Next ›") { page(key, category, number + 1) }); content.addView(bar)
             grid(result.shows, ::openShow)
+        }
+    }
+    /** Opens a beeb://programme or beeb://episode link: the programme's page, with the
+     *  episode's panel over it for an episode. BACK from the page goes Home. */
+    private fun openLink(link: ProgrammeLink) {
+        episodePanel?.dismiss(); backStack.clear(); currentTab = "Home"; updateTabs(); returnScreen = { home() }
+        when (link) {
+            is ProgrammeLink.Show -> load("BBC", { api.programme(link.pid) }) { openShow(it) }
+            is ProgrammeLink.Episode -> load("BBC", {
+                val episode = api.episode(link.pid)
+                // A film's top-level item is the episode itself, which /programmes may not
+                // know; the episode's own title and art stand in for the page then.
+                val show = if (episode.showId == episode.id) null else runCatching { api.programme(episode.showId) }.getOrNull()
+                episode to (show ?: Programme(episode.showId, episode.title, summary = episode.summary, image = episode.image))
+            }) { (episode, show) ->
+                openShow(show)
+                episode(episode, null)
+            }
         }
     }
     private fun openShow(show: Programme) {

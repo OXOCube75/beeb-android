@@ -67,6 +67,13 @@ class BbcApi(private val context: Context) {
         error("Programme has too many episode pages")
     }
     fun episode(id: String): Programme = Programme.episode(episodeJson(id))
+    /** A programme (brand, series or one-off) by its pid, for a beeb://programme link. */
+    fun programme(id: String): Programme {
+        val pid = Parsing.pid(id)
+        val j = json("https://ibl.api.bbc.co.uk/ibl/v1/programmes/$pid").list("programmes").firstOrNull() ?: error("Programme not found")
+        check(j.text("id") == pid) { "Unexpected programme" }
+        return Programme.show(j)
+    }
     private fun episodeJson(id: String): JSONObject {
         val pid=Parsing.pid(id)
         return PlaybackVersions.episode(get("https://ibl.api.bbc.co.uk/ibl/v1/episodes/$pid"),pid)
